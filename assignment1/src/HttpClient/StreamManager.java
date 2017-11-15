@@ -68,7 +68,6 @@ public class StreamManager {
 	
 	// Method responsible for writing stirng to specifiec directory 
 	// with the content passed to it as a string.
-	
 	public boolean writeFile(String filename, String content)throws Exception{
 		BufferedWriter out = new BufferedWriter(new FileWriter(filename, true));
 		out.write(content);

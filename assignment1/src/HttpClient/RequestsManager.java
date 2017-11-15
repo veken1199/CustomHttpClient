@@ -145,13 +145,12 @@ public class RequestsManager {
 	
 	// Method responsible for opening sockets and preparing input/output streams
 	private void prepareRequest(String url) throws Exception{
-		this.address = InetAddress.getByName(url);
-		this.socket  = new Socket(this.address, 80);
+		this.address = InetAddress.getLocalHost();
+		this.socket  = new Socket(address, 50);
 		this.out = new PrintWriter(this.socket.getOutputStream());
 		this.reader = new BufferedReader(new InputStreamReader(this.socket.getInputStream()));
 		this.stream_manager = new StreamManager();
 	}
-	
 	
 	// Method responsible for displaying the request info
 	private void requestDisplay(String url, String sublink, String method, Map<String, String> headers){

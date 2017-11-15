@@ -71,6 +71,12 @@ public class Parser {
 		.defaultsTo("")
 		.requiresArgument();
 		
+		parser.acceptsAll(asList("udp"), "Associates the content of a file to the body HTTP POST request.")
+		.withOptionalArg()
+		.ofType( boolean.class )
+		.defaultsTo(false)
+		.requiresArgument();
+		
 		parser.acceptsAll(asList("help"), "Gereral usage")
         .withOptionalArg()
         .defaultsTo("");
@@ -79,6 +85,11 @@ public class Parser {
 	
 	// This Method responsible for handling and processing the commands
 	public void handleCommands(){
+		
+		//checking if UDP flag is on 
+		if((boolean)opts.valueOf("udp")){
+			this.requests_manager = new UDPRequestManager();
+		}
 		
 		// Handling Help commands
 		CommandsValidator validator = new CommandsValidator(opts);

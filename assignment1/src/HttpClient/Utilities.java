@@ -30,13 +30,14 @@ public class Utilities {
 		// Method responsible for parsing the url and extracting the host/sublinks/queries
 		public String[] parseURL(String str){
 			
+		
 			//Step 1 remove 'http://' if does exists
 			if(str.contains("http://")){
 				str = str.substring(str.indexOf("http://")+7);
 			}
 			
 			//Step 2 add www. if does not exist
-			if(!str.contains("www.")){
+			if(!str.contains("www.") && !str.contains("localhost")){
 				str = "www." + str;
 			}
 			
@@ -46,6 +47,10 @@ public class Utilities {
 			//Step 4 remove the sublink from the url
 			if(str.contains("/")){
 				str = str.substring(0,str.indexOf('/'));
+			}
+			
+			if(str.contains("localhost")){
+				str = "http://" + str;
 			}
 			return new String[]{str, parsed_dir};
 		}
