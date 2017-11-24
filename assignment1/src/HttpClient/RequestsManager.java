@@ -15,7 +15,7 @@ public class RequestsManager {
 	private PrintWriter out;
 	private BufferedReader reader;
 	private StreamManager stream_manager;
-	private Utilities utilities = new Utilities();
+	public  Utilities utilities = new Utilities();
 	
 	// Sending GET request
 	public String GET(String _url, String header, boolean verbose){
@@ -27,6 +27,7 @@ public class RequestsManager {
 		String url_parsed = url[0];
 		String directory_parsed = url[1];
 		String redirect = "";
+		
 		Map<String, String> headers_paresed = this.utilities.mapConverter(header);
 		
 		//saasd 
@@ -175,9 +176,5 @@ public class RequestsManager {
 		}
 		return redirect;
 	}
-	
-	public void ss(String x){
-		x = new String("bla bla");
-		   
-	}
+
 }
