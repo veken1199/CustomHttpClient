@@ -18,10 +18,10 @@
   - java -jar Httpc.jar -help post
   - java -jar Httpc.jar -help get
   - java -jar Httpc.jar -get "www.google.com" -h"Connection:Close" -v
-  - java -jar Httpc.jar -get "www.google.com" -h"Connection:Close" -v -o"C:\Users\xxxxx\Desktop\src\src\resources\getGoogle1.text"
-  - java -jar Httpc.jar -post "www.google.com" -h"Connection:Close" -v -o"C:\Users\xxxxx\Desktop\src\src\resources\getGoogle1.text"
-  - java -jar Httpc.jar -post "http://httpbin.org/post" -h"Connection:Close" -v -o"C:\Users\xxxx\Desktop\src\src\resources\postGoogle1.text" -d"Connection:foo"
-  - java -jar Httpc.jar -post "http://httpbin.org/post" -h"Connection:Close" -v -o"C:\Users\xxxx\Desktop\src\src\resources\postGoogle1.text" -f"C:\Users\xxxx\Desktop\src\src\resources\postGoogle1.text"
+  - java -jar Httpc.jar -get "www.google.com" -h"Connection:Close" -v -o"C:\Users\BABO99\Desktop\src\src\resources\getGoogle1.text"
+  - java -jar Httpc.jar -post "www.google.com" -h"Connection:Close" -v -o"C:\Users\BABO99\Desktop\src\src\resources\getGoogle1.text"
+  - java -jar Httpc.jar -post "http://httpbin.org/post" -h"Connection:Close" -v -o"C:\Users\BABO99\Desktop\src\src\resources\postGoogle1.text" -d"Connection:foo"
+  - java -jar Httpc.jar -post "http://httpbin.org/post" -h"Connection:Close" -v -o"C:\Users\BABO99\Desktop\src\src\resources\postGoogle1.text" -f"C:\Users\BABO99\Desktop\src\src\resources\postGoogle1.text"
 
 
 

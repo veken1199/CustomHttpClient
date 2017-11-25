@@ -29,7 +29,7 @@ public class Parser {
 		this.opts = parser.parse(args);
 		
 		// Validating the commands
-		//this.validator = new CommandsValidator(opts);
+		this.validator = new CommandsValidator(opts);
 		
 		// Check if the verbose is requested
 		this.verbose = true;//opts.has("v");	

@@ -8,10 +8,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+
 public class WindowManager {
 	private int WINDOWSIZE = 0;
 	private int currentSequenceNumber = 1;
-	private static SocketAddress ROUTERADDRESS = new InetSocketAddress("localhost", 3000);
+	public static SocketAddress ROUTERADDRESS;
+	public static InetSocketAddress SERVERADDRESS;
 	private InetSocketAddress clientFullAddress;
 	
 	private Map<Integer, Integer> senderWindow;
@@ -32,6 +34,8 @@ public class WindowManager {
 	
 	public WindowManager(Packet pack, DatagramChannel ch){
 		this.clientFullAddress = new InetSocketAddress("localhost", pack.getPeerPort());
+		this.SERVERADDRESS = new InetSocketAddress("localhost", 8007);
+		this.ROUTERADDRESS = new InetSocketAddress("localhost", 3000);
 		this.receiverWindow = new HashMap<Integer, Integer>();
 		this.receivedPacket = new HashMap<Integer, Packet>();
 		this.senderWindow = new HashMap<Integer, Integer>();	
@@ -108,6 +112,7 @@ public class WindowManager {
 			System.out.print(newSequenceNumber +" ");
 			this.slidingWindow.add(i, newSequenceNumber++);
 		}
+		System.out.println();
 	}
 	
 	/**
@@ -216,7 +221,6 @@ public class WindowManager {
 				
 			Packet packet = this.packetBuilder(7, packetData, ++packetSequenceNumber);
 			System.out.println("Added the sequence number : " + packet.getSequenceNumber());
-			System.out.println(new String(packet.getPayload()));
 			windowPackets.put((int)packetSequenceNumber, packet);
 		}
 		
@@ -234,6 +238,18 @@ public class WindowManager {
                 .setPayload(payload)
                 .create();
 	}
+
+	public Packet packetBuilderClient(int type, byte[] payload, long sequenceNumber){
+		
+		return new Packet.Builder()
+				.setType(type)
+                .setSequenceNumber(sequenceNumber)
+                .setPortNumber(this.SERVERADDRESS.getPort())
+				.setPeerAddress(this.SERVERADDRESS.getAddress())
+                .setPeerAddress(this.clientFullAddress.getAddress())
+                .setPayload(payload)
+                .create();
+	}
 	
 	
 	/**
@@ -241,7 +257,7 @@ public class WindowManager {
 	 * @param initialSequenceNumber
 	 * @param size
 	 */
-	public void initializeSenderWindow(int initialSequenceNumber ,int size){
+	public void initializeSenderWindow(int initialSequenceNumber, int size){
 		for(int i = 0; i < size; i++ ){
 			this.senderWindow.put(i + initialSequenceNumber, 0);
 		}
@@ -321,6 +337,7 @@ public class WindowManager {
 		if(this.senderWindow.containsValue(0)){
 			return false;
 		}
+		
 		return true;
 	}
 }
