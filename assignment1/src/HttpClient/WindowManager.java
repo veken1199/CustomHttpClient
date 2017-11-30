@@ -340,4 +340,14 @@ public class WindowManager {
 		
 		return true;
 	}
+	
+	public void senderRetransmitWindow() {
+		for(int i = 0; i < this.WINDOWSIZE; i++){
+			try{
+			if(this.senderWindow.get((int)this.currentSequenceNumber + i) == 0){
+				System.out.println(i + " " + this.currentSequenceNumber + " " + WindowPackets.size());
+				this.sendPacket(this.WindowPackets.get((int)this.currentSequenceNumber + i));
+			}}catch(Exception e){}
+		}
+	}
 }

@@ -11,21 +11,33 @@ import java.nio.ByteOrder;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import javax.management.RuntimeErrorException;
 
 
 public class UDPRequestManager extends RequestsManager {
 
 	public static SocketAddress ROUTERADDRESS;
 	public static InetSocketAddress SERVERADDRESS; // assumption that the server
-													
-	private String connectionState;
-	private ByteBuffer buf;
-	private DatagramChannel UDPChannel;
-	private WindowManager windowManager;
 
-	
+	public String connectionState;
+	private ByteBuffer buf;
+	public DatagramChannel UDPChannel;
+	private WindowManager windowManager;
+	private CustomTimeout timer;
+	private Packet requestPacket;
+	private Thread.UncaughtExceptionHandler h;
+	public int count = 0;
+
 	// Constructor
 	public UDPRequestManager() {
 		this.SERVERADDRESS = new InetSocketAddress("localhost", 8007);
@@ -33,9 +45,9 @@ public class UDPRequestManager extends RequestsManager {
 		this.windowManager = new WindowManager();
 		buf = ByteBuffer.allocate(Packet.MAX_LEN);
 		this.connectionState = "NONE";
+		this.timer = new CustomTimeout(1);
 	}
 
-	
 	// GET Method
 	public String GET(String _url, String header, boolean verbose) {
 		try {
@@ -54,23 +66,30 @@ public class UDPRequestManager extends RequestsManager {
 
 				// 8 for GET requests
 
-				this.sendPacket(this.packetBuilder(8, this.prepareGET(directory, headers),
-						windowManager.getPacketNumberAndIncreament()));
+				this.requestPacket = this.packetBuilder(8, this.prepareGET(directory, headers),
+						503);
+				
+				this.sendPacket(this.requestPacket);
 
 				System.out.println("Request is sent... waiting for confirmation");
+				
+				this.setUpTimer("Retransmitting the request", "resendGetRequest", (long)(2));
+			
 				this.connectionState = "REQ_SENT";
 			}
 
 			// ack with type 9 prepare the window
 			if (this.connectionState.equals("REQ_SENT")) {
-
+				
 				buf = ByteBuffer.allocate(Packet.MAX_LEN).order(ByteOrder.BIG_ENDIAN);
 				SocketAddress router = UDPChannel.receive(buf);
 				buf.flip();
-
 				Packet packet = Packet.fromBuffer(buf);
-
-				if(packet.getType() == 5){
+					
+				if (packet.getType() == 5) {
+					
+					this.connectionState = "DATA";
+					int numberOfPackets = Integer.parseInt(new String(packet.getPayload()));
 					windowManager.setWINDOWSIZE(5);
 					windowManager.setCurrentSequenceNumber(1);
 					windowManager.initializeReceiverWindow(1, Integer.parseInt(new String(packet.getPayload())));
@@ -79,8 +98,11 @@ public class UDPRequestManager extends RequestsManager {
 
 					// setting up the sliding window system
 					windowManager.setPacketsNumber(Integer.parseInt(new String(packet.getPayload())));
-
-					this.sendPacket(this.packetBuilder(9, "", windowManager.getCurrentSequenceNumber()));
+					this.setUpTimer("Retransmitting the window confirmation", "resendGetRequest", (long)(3));
+					this.requestPacket = this.packetBuilder(9, "", packet.getSequenceNumber()+1);
+					
+					this.sendPacket(this.requestPacket);
+					
 					System.out.print("Window created, ready to receive packets");
 					this.connectionState = "REQ_ESTABLISHED";
 				}
@@ -102,12 +124,18 @@ public class UDPRequestManager extends RequestsManager {
 					SocketAddress router2 = UDPChannel.receive(buf);
 					buf.flip();
 					Packet packet2 = Packet.fromBuffer(buf);
-
-					System.out.println("processing packet sn: " + packet2.getSequenceNumber());
+					
+					
+					if(packet2.getType() != 7)
+					{
+					
+					}
+					
 					// step 1 check if the current packet sequence number is
 					// within the window
-					if (windowManager.isPacketAccepted(packet2)) {
-
+					else if (windowManager.isPacketAccepted(packet2)) {
+						this.connectionState = "DATA_RES";
+						System.out.println("processing packet sn: " + packet2.getSequenceNumber());
 						// remove the packet sequence number
 						windowManager.removePacketFromReceiverWindow(packet2);
 
@@ -118,7 +146,8 @@ public class UDPRequestManager extends RequestsManager {
 						this.sendPacket(this.packetBuilder(10, "", packet2.getSequenceNumber()));
 
 					} else {
-						System.out.print("Packet " + packet2.getSequenceNumber() + " REJECTED");
+						System.out.println("Packet " + packet2.getSequenceNumber() + " ALREADY ACKED");
+						this.sendPacket(this.packetBuilder(10, "", packet2.getSequenceNumber()));
 					}
 				}
 
@@ -134,7 +163,6 @@ public class UDPRequestManager extends RequestsManager {
 		catch (Exception e) {
 			System.out.println("ERROR202: the packet cannot be sent!" + e.fillInStackTrace());
 		}
-
 		return "";
 	}
 
@@ -142,7 +170,7 @@ public class UDPRequestManager extends RequestsManager {
 		try {
 			// We just want a single response.
 			UDPChannel = DatagramChannel.open();
-			
+
 			if (!this.connectionState.equals("ESTABLISHED")) {
 				this.threeWayHandShake();
 			}
@@ -159,7 +187,7 @@ public class UDPRequestManager extends RequestsManager {
 				byte[] requestBytes = (this.preparePOST(directory, headers, data) + data).getBytes();
 				int numberOfPackets = (requestBytes.length / 1013) + 1;
 				System.out.println("Preparing : " + numberOfPackets + " Packets");
-				
+
 				this.windowManager.setPacketsNumber(numberOfPackets);
 				this.windowManager.windowPacketBuilder(numberOfPackets, requestBytes);
 
@@ -168,16 +196,18 @@ public class UDPRequestManager extends RequestsManager {
 				// setting the state to SYN-SIZE
 				windowManager.setCurrentSequenceNumber(1);
 				windowManager.setWINDOWSIZE(5);
-				this.sendPacket(this.packetBuilder(5, numberOfPackets + "" , 1));
-
+				this.requestPacket = this.packetBuilder(5, numberOfPackets + "", 503);
+				this.sendPacket(this.requestPacket);
+				
 				this.windowManager.initializeSenderWindow(1, numberOfPackets);
 				windowManager.initialShiftWindow();
 				System.out.println("\n---------------------------------");
 				System.out.println("Request is sent... waiting for confirmation");
+				this.setUpTimer("Retransmitting the request", "resendGetRequest", (long)(2));
 				this.connectionState = "SYN_SIZE";
 			}
-			
-			while(!windowManager.isSenderTransmissionDone()){
+
+			while (!windowManager.isSenderTransmissionDone()) {
 				
 				buf = ByteBuffer.allocate(Packet.MAX_LEN).order(ByteOrder.BIG_ENDIAN);
 				SocketAddress router = UDPChannel.receive(buf);
@@ -185,12 +215,14 @@ public class UDPRequestManager extends RequestsManager {
 				Packet pack = Packet.fromBuffer(buf);
 				
 				if (pack.getType() == 9) {
+					this.setUpTimer("Retransmitting the window packets", "sendpackets", (long)(2) );
+					this.connectionState = "DATA_SEND";
 					windowManager.sendWindow();
 					continue;
 				}
-				
+
 				if (pack.getType() == 10) {
-	
+					this.connectionState = "DATA_SEND";
 					System.out.println("Ack received with seq num : " + pack.getSequenceNumber());
 					if (windowManager.isValidAct(pack)) {
 
@@ -202,43 +234,45 @@ public class UDPRequestManager extends RequestsManager {
 							this.windowManager.shiftWindow();
 							this.windowManager.sendWindow();
 						}
-					} 
-					
+					}
+
 					else {
 						System.out.println("Received a delayed ACK " + pack.getSequenceNumber());
 					}
 
 					// check if we transmitted all the files
 					if (this.windowManager.isSenderTransmissionDone()) {
+						this.connectionState = "DONE";
 						System.out.println("The request is complete!");
 						break;
 					}
 				}
 			}
-			
-			//waiting for receiver's response, 1 packet
-			buf = ByteBuffer.allocate(Packet.MAX_LEN).order(ByteOrder.BIG_ENDIAN);
 
+			// waiting for receiver's response, 1 packet
+			buf = ByteBuffer.allocate(Packet.MAX_LEN).order(ByteOrder.BIG_ENDIAN);
+			boolean e = false;
+			boolean res = false;
+			while(!e){
+				
 			SocketAddress router = UDPChannel.receive(buf);
 			buf.flip();
 			Packet pack = Packet.fromBuffer(buf);
 			
-			System.out.println("----------------------------------");
-			System.out.println(new String(pack.getPayload()));
-			System.out.println("----------------------------------");
-			
-			//send the last ack
-			windowManager.sendPacket(this.packetBuilder(10, "", -100));
-			
-
-			SocketAddress router2 = UDPChannel.receive(buf);
-			buf.flip();
-			pack = Packet.fromBuffer(buf);
-			
-			if(pack.getType() == 10 && pack.getSequenceNumber() == -100){
-				System.out.println("Connection is closed");
+			if(pack.getType() == 12 && !res ){
+				System.out.println("----------------------------------");
+				System.out.println(new String(pack.getPayload()));
+				System.out.println("----------------------------------");
+				res = true;
+				// send the last ack
+				windowManager.sendPacket(this.packetBuilder(10, "", -100));
 			}
-			
+			if (pack.getType() == 10 && pack.getSequenceNumber() == -100) {
+				System.out.println("Connection is closed");
+				e = true;
+			}
+		}
+
 		}
 
 		catch (Exception e) {
@@ -247,37 +281,57 @@ public class UDPRequestManager extends RequestsManager {
 		return data;
 	}
 
-	
-	private void threeWayHandShake() throws IOException {
-		while (true) {
+	public void threeWayHandShake() throws Exception {
+
+		Thread.UncaughtExceptionHandler h = new TimeOutHandler(this, "Handshake Has timed out", "handshake");
+
+		this.timer = new CustomTimeout(4L);
+		Thread timeWorker = new Thread(timer);
+		timeWorker.setUncaughtExceptionHandler(h);
+		timeWorker.start();
+		
+		while (this.count<4) {
 			if (this.connectionState.equals("NONE")) {
 				// step 1, send SYN packet type
-				Packet p = this.packetBuilder(0, "HI", 0);
+				
+				System.out.println("Try " + count);
+				Packet p = this.packetBuilder(0, "HI", 500);
 				this.windowManager = new WindowManager(p, UDPChannel);
 				this.sendPacket(p);
 
 				this.connectionState = "SYN_SENT";
 				System.out.println("Threeway handshake started : 1/3");
+				this.requestPacket = p;
 			}
 
 			else if (this.connectionState.equals("SYN_SENT")) {
 				// we need to wait for a response
+				
 				SocketAddress router = UDPChannel.receive(buf);
 				buf.flip();
 				Packet packet = Packet.fromBuffer(buf);
-
 				// step2, send ACK packet type
-				Packet p2 = this.packetBuilder(1, "Hello There!", 1);
+				Packet p2 = this.packetBuilder(2, "Hello There!", 502);
 				this.sendPacket(p2);
-
-				this.connectionState = "ESTABLISHED";
-				System.out.println("Threeway handshake established : 3/3");
+				this.sendPacket(p2);
+				
+				this.timer.stopTimer();
+				
+				if(this.connectionState.equals("SYN_SENT")){
+					this.connectionState = "ESTABLISHED";
+					System.out.println("Threeway handshake established : 3/3");
+				}
 			}
 
 			else if (this.connectionState.equals("ESTABLISHED")) {
 				break;
 			}
-
+			
+			else if (this.connectionState.equals("Bad")){
+				this.connectionState = "NONE";
+				continue;
+			}
+			
 			else {
 				System.out.println("ERROR231: Error occured while checking the states of the connection!");
 			}
@@ -286,8 +340,7 @@ public class UDPRequestManager extends RequestsManager {
 
 	public Packet packetBuilder(int type, String payload, long sequenceNumber) {
 		return new Packet.Builder().setType(type).setSequenceNumber(sequenceNumber)
-				.setPortNumber(this.SERVERADDRESS.getPort())
-				.setPeerAddress(this.SERVERADDRESS.getAddress())
+				.setPortNumber(this.SERVERADDRESS.getPort()).setPeerAddress(this.SERVERADDRESS.getAddress())
 				.setPayload(payload.getBytes()).create();
 	}
 
@@ -304,8 +357,42 @@ public class UDPRequestManager extends RequestsManager {
 	public String prepareGET(String directory, Map<String, String> headers) {
 		return "GET " + directory + " HTTP/1.1\n" + "Host: " + this.SERVERADDRESS + "\n";
 	}
+
+	public String preparePOST(String directory, Map<String, String> headers, String data) {
+		return "POST " + directory + " HTTP/1.1\n" + "Host: " + this.SERVERADDRESS + "\n" + "content-length: "
+				+ data.length() + "\n\n";
+	}
+
+	public void retransmitRequest() {
+		if(this.connectionState.equals("SYN_SIZE") || this.connectionState.equals("REQ_SENT") ||this.connectionState.equals("REQ_ESTABLISHED") ){
+			System.out.println("#Retransmitting Request ....");
+			this.sendPacket(this.requestPacket);
+			this.setUpTimer("Retransmitting the request", "resendGetRequest", (long)(2));
+		}	
+	}
 	
-	public String preparePOST(String directory, Map<String, String> headers, String data){
-		return "POST " + directory + " HTTP/1.1\n" + "Host: " + this.SERVERADDRESS +"\n" + "content-length: " + data.length()+"\n\n";
+	public void setUpTimer(String msg, String type, long duration){
+		this.h = new TimeOutHandler(this, msg, type);
+		this.timer = new CustomTimeout(duration);
+		Thread timeWorker = new Thread(timer);
+		timeWorker.setUncaughtExceptionHandler(h);
+		timeWorker.start();
+	}
+	
+	public void senderRetransmitWindow(){
+		if(!this.windowManager.isWindowReceived()){
+			System.out.println("herereere");
+			this.windowManager.senderRetransmitWindow();
+			this.setUpTimer("Retransmitting the window packets", "sendpackets", (long)(2) );
+		}
+	}
+	
+	public void retransmitHandshake(){
+		if(this.connectionState == "SYN_SENT"){
+			this.count++;
+			this.setUpTimer("Retransmitting the handshake packet packets","handshake", (long)(1) );
+			sendPacket(this.requestPacket);
+			
+		}
 	}
 }

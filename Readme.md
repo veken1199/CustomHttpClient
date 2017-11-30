@@ -24,4 +24,7 @@
   - java -jar Httpc.jar -post "http://httpbin.org/post" -h"Connection:Close" -v -o"C:\Users\BABO99\Desktop\src\src\resources\postGoogle1.text" -f"C:\Users\BABO99\Desktop\src\src\resources\postGoogle1.text"
 
 
+  In order to send UPD packets, pass -upd true flag: 
+-java -jar Httpc.jar -get "www.google.com" -h"Connection:Close" -v -udp"true"
+
 
